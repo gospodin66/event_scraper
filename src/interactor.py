@@ -140,6 +140,20 @@ class Interactor:
                 time.sleep(10)
 
                 self.logger.info(f"Searching for events on {k} page")
+                
+                links = self.driver.find_elements(By.XPATH, "//a[@role='link']")
+
+                links_set = set()
+                for l in links:
+                    link = l.get_attribute('href')
+                    if 'event' in link:
+                        links_set.add(link)
+
+                self.logger.info("Links: \n")
+                for l in links_set:
+                    print(l)
+                print("\n")
+
                 events = self.driver.find_elements(By.XPATH, "//a[@role='link']/ancestor::div/following-sibling::div")
                 results[k] = events
 
@@ -167,14 +181,16 @@ class Interactor:
                 if el.startswith(('Mon','Tue','Wed','Thu','Fri','Sat','Sun')):
                     results_final[k].append(results[k][i:i+5]) 
 
-            self.logger.info(f"Events on {k} page:\n")
+            results_str = "\n"
             for r in results_final[k]:
                 for i, ev in enumerate(r):
                     if i < len(ev) -1:
-                        print(f'{ev} ', end=' ')
+                        results_str += f'{ev} '.rstrip('\n')
                     else:
-                        print(ev, end=' ')
-                print("", end='\n')
-            print("\n")
+                        results_str += f'{ev}'.rstrip('\n')
+                results_str += '\n'
+            results_str += "\n"
+
+            self.logger.info(f"Events on {k} page: {results_str}")
 
         return results_final
