@@ -1,0 +1,10 @@
+.auth/
+bin/
+cookies/
+include/
+lib/
+lib64
+misc/
+__pycache__
+*.log
+*.cfg
