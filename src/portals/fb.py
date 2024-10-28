@@ -48,6 +48,6 @@ class Fb():
         }
 
         interactor = Interactor()
-        test_results = interactor.scrape_events(login_fields, pages)
+        events = interactor.scrape_events(login_fields, pages)
 
-        return test_results
+        return events
