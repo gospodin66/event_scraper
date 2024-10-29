@@ -11,11 +11,6 @@ from selenium.common.exceptions import (
 from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
 from selenium import webdriver
 
-ERROR_RESPONSE_CODES = [ 
-    400, 401, 403, 404, 405,
-    500, 502, 503, 504, 511, 
-]
-
 
 def init_firefox_driver() -> webdriver.Firefox:
     service = Service()

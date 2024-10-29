@@ -19,10 +19,8 @@ class Fb():
             'Boogaloo': 'boogaloozgb',
             'Masters': 'masters.zagreb',
         }
-
         interactor = Interactor()
         events = interactor.scrape_events(pages)
-
         self.logger.info(f"Events:") 
         e = '\n'
         for host, evs in events.items():
@@ -31,5 +29,4 @@ class Fb():
                 e += f'{ev}\n'
             e += '\n'
         self.logger.info(e)
-
         return events
