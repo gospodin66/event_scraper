@@ -1,6 +1,6 @@
 ## Python event scraper
 
-Script is navigating fb events pages for events hosts specified in `portals/fb.py` file. User controls wtich event hosts is bot fetching by updating variable `event_hosts` which consists of `key: val` where key is arbitrary name of the event host and val is event host name in fb URL (user can get it by manually navigating to event host's page on fb and copying the name from URL). 
+Script is navigating events pages for `event_hosts` specified in `portals/fb.py` file. User controls wtich events is bot fetching by updating `event_hosts` list which consists of event host names that are used in fb URL (user can get it by manually navigating to event host's page on fb and copying the name from URL). 
 
 **Notice**: This implementation uses `Firefox` driver.
 
