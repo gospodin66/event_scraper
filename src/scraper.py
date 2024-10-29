@@ -29,35 +29,34 @@ def init_firefox_driver() -> webdriver.Firefox:
 class Scraper:
 
     def __init__(self) -> None:
-        self.host = COMMON["host"]
         self.driver = init_firefox_driver()
         self.driver.set_page_load_timeout(float(WEBDRIVER_FIREFOX_WAIT_TIMEOUT))
         self.driver.implicitly_wait(float(WEBDRIVER_FIREFOX_WAIT_TIMEOUT))
         self.logger = logging.getLogger(__name__)
 
 
-    def scrape_events(self, pages: list) -> dict:
+    def scrape_events(self, event_hosts: list) -> dict:
         """
         Wrapper function for following links.
         """
-        return self.follow_links(pages)
+        return self.follow_links(event_hosts)
 
 
 
-    def follow_links(self, pages: list) -> dict:
+    def follow_links(self, event_hosts: list) -> dict:
         """
         Follows links crafted by event host name and fb events URL.
         Extracts latest events from the events page.
         """
         events = {}
         events_final = {}
-        for p in pages:
-            events_final[p] = []
+        for eh in event_hosts:
+            events_final[eh] = []
             events['links'] = []
             events['titles'] = []
-            page_event_url = f'https://facebook.com/{p}/events'
+            page_event_url = f'https://facebook.com/{eh}/events'
             self.driver.get(page_event_url)
-            self.logger.info(f"Searching for events on {p} event page {page_event_url}")
+            self.logger.info(f"Searching for events on {eh} event page {page_event_url}")
             time.sleep(WAIT_TIMEOUT)
             try:
                 links = self.driver.find_elements(By.XPATH, "//a[@role='link']")
@@ -80,13 +79,13 @@ class Scraper:
                     if title.startswith(('Mon','Tue','Wed','Thu','Fri','Sat','Sun')):
                         ev = f"{title.replace('\n', ' ')} :: {link}"
                         print(ev)
-                        events_final[p].append(ev)
+                        events_final[eh].append(ev)
                 print("\n")
             except TimeoutException as e:
-                ex = '{} raised on follow_links() '.format(e.__class__.__name__)
+                ex = '{} raised on follow_links() on {}'.format(e.__class__.__name__, page_event_url)
                 self.logger.error(ex)
             except StaleElementReferenceException as e:
-                ex = '{} raised on follow_links() '.format(e.__class__.__name__)
+                ex = '{} raised on follow_links() on {}'.format(e.__class__.__name__, page_event_url)
                 self.logger.error(ex)
         self.logger.info("Closing browser.")
         self.driver.quit()

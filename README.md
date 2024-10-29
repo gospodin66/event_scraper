@@ -1,6 +1,6 @@
 ## Python event scraper
 
-Script is navigating fb event pages for event hosts specified in `portals/fb.py` file. User can specify which event hosts the bot needs to crawl by updating variable `pages` which consists of `key: val` where key is arbitrary name of the event host and val is event host name in fb URL (user can get it by manually navigating to event host's page on fb and copying the name from URL). 
+Script is navigating fb events pages for events hosts specified in `portals/fb.py` file. User controls wtich event hosts is bot fetching by updating variable `event_hosts` which consists of `key: val` where key is arbitrary name of the event host and val is event host name in fb URL (user can get it by manually navigating to event host's page on fb and copying the name from URL). 
 
 **Notice**: This implementation uses `Firefox` driver.
 
@@ -16,7 +16,7 @@ yum update && yum install python3
 # Ubuntu, Debian
 apt update && apt install python3 
 
-# Verify that python is installed
+# Verify that python3 is installed
 $ python --version
 Python 3.12.6
 ```

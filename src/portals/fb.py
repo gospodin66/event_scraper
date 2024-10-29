@@ -5,23 +5,22 @@ from scraper import Scraper
 class Fb():
     base_domain = COMMON.get('host')
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
 
 
-    def start_requests(self) -> dict:
-        pages = [
+    def start_requests(self) -> None:
+        event_hosts = [
             'akc.attack',
             'infamousTDKM',
             'mochvara',
-            'ReciKlaonica',
-            'StaraSkolaNM',
             'boogaloozgb',
-            'masters.zagreb',
+            'ReciKlaonica',
+            #'StaraSkolaNM',
+            #'masters.zagreb',
         ]
-        interactor = Scraper()
         self.logger.info("Fetching events..")
-        events = interactor.scrape_events(pages)
+        events = Scraper().scrape_events(event_hosts)
         self.logger.info(f"Events:") 
         e = '\n'
         for host, evs in events.items():
@@ -30,4 +29,3 @@ class Fb():
                 e += f'{ev}\n'
             e += '\n'
         self.logger.info(e)
-        return events
