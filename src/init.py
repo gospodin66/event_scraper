@@ -1,5 +1,5 @@
 from portals.fb import Fb
-from botconfigs import config, convert_time
+from config import config, convert_time
 import datetime
 import logging
 import time

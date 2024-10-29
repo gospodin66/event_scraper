@@ -1,6 +1,6 @@
-from botconfigs import COMMON
+from config import COMMON
 import logging
-from interactor import Interactor
+from scraper import Scraper
 
 class Fb():
     base_domain = COMMON.get('host')
@@ -10,16 +10,17 @@ class Fb():
 
 
     def start_requests(self) -> dict:
-        pages = {
-            'Attack': 'akc.attack',
-            'TDK': 'infamousTDKM',
-            'Mocvara': 'mochvara',
-            'Klaonica': 'ReciKlaonica',
-            "Stara Skola": 'StaraSkolaNM',
-            'Boogaloo': 'boogaloozgb',
-            'Masters': 'masters.zagreb',
-        }
-        interactor = Interactor()
+        pages = [
+            'akc.attack',
+            'infamousTDKM',
+            'mochvara',
+            'ReciKlaonica',
+            'StaraSkolaNM',
+            'boogaloozgb',
+            'masters.zagreb',
+        ]
+        interactor = Scraper()
+        self.logger.info("Fetching events..")
         events = interactor.scrape_events(pages)
         self.logger.info(f"Events:") 
         e = '\n'

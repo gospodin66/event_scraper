@@ -20,9 +20,7 @@ def convert_time(seconds: float) -> str:
         return f"{seconds} seconds"
     
 
-# Timeout that WebDriverWait waits for DOM element to be visible on page before it raises exception
 WAIT_TIMEOUT = 20
-# Timeout that webdriver.Firefox waits for page to load and or as implicit wait for DOM element to be visible
 WEBDRIVER_FIREFOX_WAIT_TIMEOUT = 20
 
 config = {
