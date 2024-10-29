@@ -1,6 +1,6 @@
 import logging
     
-BROWSER_PATH = '/usr/bin/firefox'
+BROWSER_BINARY_PATH = '/usr/bin/firefox'
 WAIT_TIMEOUT = 15
 
 config = {

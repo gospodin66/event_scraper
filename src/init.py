@@ -1,9 +1,10 @@
-from portals.fb import Fb
-from config import config
+from config import config, event_hosts
 import datetime
 import logging
 import time
 import sys
+
+from scraper import Scraper
 
 logging.basicConfig(
     level=config['logger']['level'],
@@ -28,7 +29,8 @@ def main():
     logger = logging.getLogger(__name__)
     startt = time.time()
     try:
-        events = Fb().start_requests()
+        logger.info("Fetching events..")
+        events = Scraper().fetch_events(event_hosts)
         evts = '\n'
         for host, evs in events.items():
             evts += f'{host}:\n'

@@ -1,4 +1,4 @@
-from config import BROWSER_PATH, COMMON, WAIT_TIMEOUT
+from config import BROWSER_BINARY_PATH, COMMON, WAIT_TIMEOUT
 import logging
 import time
 from selenium.webdriver.firefox.service import Service
@@ -19,7 +19,7 @@ def init_firefox_driver() -> webdriver.Firefox:
     options.add_argument("--headless")
     options.add_argument(f"user-agent={COMMON.get('user_agent')}")
     return webdriver.Firefox(
-        firefox_binary=FirefoxBinary(BROWSER_PATH), 
+        firefox_binary=FirefoxBinary(BROWSER_BINARY_PATH), 
         options=options, 
         service=Service(),
     )
@@ -34,7 +34,7 @@ class Scraper:
         self.logger = logging.getLogger(__name__)
 
 
-    def scrape_events(self, event_hosts: list) -> dict:
+    def fetch_events(self, event_hosts: list) -> dict:
         """
         Follows links crafted by event host name and fb events URL.
         Extracts latest events from the events page.
