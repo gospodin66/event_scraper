@@ -9,7 +9,7 @@ logging.basicConfig(
     level=config['logger']['level'],
     format=config['logger']['format'],
     handlers=[
-        logging.FileHandler(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M') + "-testlog.log"),
+        logging.FileHandler(datetime.datetime.now().strftime('%Y-%m-%d-%H-%M') + "-events.log"),
         logging.StreamHandler(sys.stdout)
     ]
 )

@@ -26,11 +26,6 @@ WAIT_TIMEOUT = 20
 # Timeout that webdriver.Firefox waits for page to load and or as implicit wait for DOM element to be visible
 WEBDRIVER_FIREFOX_WAIT_TIMEOUT = 20
 
-CREDS_FB = [
-    f_read(Path('../.auth/.e.txt')),
-    f_read(Path('../.auth/.p.txt'))
-]
-
 config = {
     'logger': {
         'format': '[%(asctime)s][%(levelname)s][%(name)s]: %(message)s',
@@ -43,13 +38,4 @@ COMMON = {
     'proxy': '',
     'scheme': 'https',
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
-}
-
-FB = {
-    'start_url': f'{COMMON["scheme"]}://{COMMON["host"]}/login',
-    'authenticated_url': f'{COMMON["scheme"]}://{COMMON["host"]}/',
-    'login': {
-        'username': CREDS_FB[0],
-        'password': CREDS_FB[1],
-    },
 }
