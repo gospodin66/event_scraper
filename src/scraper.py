@@ -1,95 +1,142 @@
-from config import BROWSER_BINARY_PATH, COMMON, WAIT_TIMEOUT
-import logging
-import time
-from selenium.webdriver.firefox.service import Service
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import (
-    TimeoutException,
-    StaleElementReferenceException,
-)
-from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
-from selenium import webdriver
+from browser import (BrowserFactory, BrowserType)
+from config import BROWSER_BINARY_PATH, COMMON, config, WAIT_TIMEOUT
+from common import dict_vals_exist
+from logging import getLogger
+from selenium.common.exceptions import (TimeoutException, StaleElementReferenceException, WebDriverException)
+import sys
+from time import sleep
+from smtp import SMTP
+
+class Scraper():
+
+    def __init__(self):
+        self.logger = getLogger(__name__)
+        browser = BrowserType.FIREFOX if 'firefox' in BROWSER_BINARY_PATH else BrowserType.CHROME
+        self.browser = BrowserFactory.create_browser(browser)
+        self.hosts = self.get_event_hostlist()
+        if not self.hosts:
+            raise ValueError("No hosts found. Please check your configuration.")
+        self.progbar_width = 50
+        self.progbar_step = round(self.progbar_width / len(self.hosts))
 
 
-def init_firefox_driver() -> webdriver.Firefox:
-    options = webdriver.FirefoxOptions()
-    options.add_argument("--incognito")
-    options.add_argument("--disable-extensions")
-    options.add_argument('--ignore-certificate-errors')
-    options.add_argument("--headless")
-    options.add_argument(f"user-agent={COMMON.get('user_agent')}")
-    return webdriver.Firefox(
-        firefox_binary=FirefoxBinary(BROWSER_BINARY_PATH), 
-        options=options, 
-        service=Service(),
-    )
+
+    def get_event_hostlist(self) -> list:
+        return [eh for eh in config['hostlist'] if eh and not str(eh).startswith(('#', '\n'))]
+    
+
+    def print_and_notify_on_events(self, events: dict) -> int:
+        evts = '\n'
+        for host, evs in events.items():
+            if len(evs) > 0:
+                evts += f'{host}:\n'
+                for ev in evs:
+                    evts += f'{ev}\n'
+                evts += '\n'
+
+        self.logger.info(evts)
+
+        if not dict_vals_exist(config['smtp']):
+            self.logger.error("Error: SMTP is not configured.")
+            return 1
+        
+        _smtp = SMTP()
+        if _smtp.notify_email() != 0:
+            self.logger.error("Error: Failed to send email notification.")
+            return 1
+        
+        return 0
 
 
-class Scraper:
+    def spawn_progbar(self):
+        # '0.00%' has 5 characters
+        percentage_offset = 5
+        sys.stdout.write("Processing...\n[0.00%{}]".format(" " * (self.progbar_width - percentage_offset)))
+        # return to start of line
+        sys.stdout.write("\b" * (self.progbar_width +1)) 
+        sys.stdout.flush()
 
-    def __init__(self) -> None:
-        self.driver = init_firefox_driver()
-        self.driver.set_page_load_timeout(float(WAIT_TIMEOUT))
-        self.driver.implicitly_wait(float(WAIT_TIMEOUT))
-        self.logger = logging.getLogger(__name__)
+
+    def update_progbar(self, cycle: int):
+        percentage = (cycle / len(self.hosts)) * 100
+        # '100.00%' has 7 characters
+        percentage_offset = 6 if cycle < len(self.hosts) else 7
+        sys.stdout.write(f'\r[{str("=" * (self.progbar_step * cycle - percentage_offset))}{percentage:.2f}%')
+        sys.stdout.flush()
+        
+
+    def run_program(self) -> dict:
+        """
+        Wrapper for fetch_events() to ensure browser is closed after program execution.
+        """
+        self.logger.info(f'Script is running on {str(self.browser.browser_type).split(".")[1].lower()} browser')
+        try:
+            # Do something with the browser
+            events = self.fetch_events()
+        finally:
+            self.browser.close_browser()
+        return events
 
 
-    def fetch_events(self, event_hosts: list) -> dict:
+    def fetch_events(self) -> dict:
         """
         Follows links crafted by event host name and fb events URL.
         Extracts latest events from the events page.
         """
         events = {}
-        events_final = {}
-        for eh in event_hosts:
-            events_final[eh] = []
-            events['links'] = []
-            events['titles'] = []
-            page_event_url = f'https://facebook.com/{eh}/events'
+        self.spawn_progbar()
+
+        for i, host in enumerate(self.hosts):
+            events[host] = []
+            page_event_url = str(config['event_url']).replace(COMMON['url_placeholder'], host)
 
             try:
-                self.driver.get(page_event_url)
+                self.browser.driver.get(page_event_url)
             except TimeoutException as e:
-                ex = '{} raised on follow_links(): Failed to fetch URL: {}'.format(e.__class__.__name__, page_event_url)
-                self.logger.error(ex)
+                self.logger.error(f'{e.__class__.__name__} exception raised: {page_event_url}: {e.args[::-1]}')
+                continue
+            except Exception as e:
+                self.logger.error(f'Unknown exception raised: {page_event_url}: {e.args[::-1]}')
                 continue
 
-            self.logger.info(f"Searching for events on {eh} event page {page_event_url}")
-            time.sleep(WAIT_TIMEOUT)
+            self.logger.debug(f"Searching for events on {host} event page {page_event_url}")
+            sleep(WAIT_TIMEOUT)
 
             try:
-                links = self.driver.find_elements(By.XPATH, "//a[@role='link']")
-                for link in links:
-                    l = link.get_attribute('href')
-
-                    if l in events['links']:
+                for link in self.browser.driver.find_elements(
+                    by=config['link_selector'][0],
+                    value=config['link_selector'][1]
+                ):
+                    href = link.get_attribute('href')
+                    if href in events[host]:
                         continue
 
-                    if 'event' in l:
-                        try:
-                            event = link.find_element(By.XPATH, "./ancestor::div/following-sibling::div")
-                        except Exception as e:
-                            self.logger.error(f"Exception raised for event {event}: Unable to find following <div> {e}") 
-                            continue
-                        if hasattr(event, 'text'):
-                            if event.text:
-                                events['links'].append(l)
-                                events['titles'].append(event.text)
+                    if 'event' in href:
+                        event = link.find_element(
+                            by=config['event_selector'][0],
+                            value=config['event_selector'][1]
+                        )
+                        if hasattr(event, 'text') and event.text != '':
+                            title = event.text.replace('  · ', '').strip()
 
-                print("\n")
-                for link, title in zip(events['links'], events['titles']):
-                    if title.startswith(('Mon','Tue','Wed','Thu','Fri','Sat','Sun')):
-                        ev = f"{title.replace('\n', ' ')} :: {link}"
-                        print(ev)
-                        events_final[eh].append(ev)
-                print("\n")
+                            if title.startswith(('Mon','Tue','Wed','Thu','Fri','Sat','Sun')):
+                                events[host].append(f"{title.replace('\n', ' ')} :: {href}")
 
-            except TimeoutException as e:
-                self.logger.error('{} raised on follow_links(): Failed to fetch events for {}'.format(e.__class__.__name__, page_event_url))
-            except StaleElementReferenceException as e:
-                self.logger.error('{} raised on follow_links(): Failed to fetch events for {}'.format(e.__class__.__name__, page_event_url))
+                self.update_progbar(i+1)
 
-        self.logger.info("Closing browser.")
-        self.driver.quit()
+            except (TimeoutException, StaleElementReferenceException, WebDriverException) as e:
+                self.logger.error(f'{e.__class__.__name__} exception raised: Failed to fetch events for {page_event_url}: {e.args[::-1]}')
+            except Exception as e:
+                self.logger.error(f"Unknown exception raised: Unable to find html element: {e.args[::-1]}") 
+        
+        sys.stdout.write('\n')
+        sys.stdout.flush()
 
-        return events_final
+        return events
+        
+
+
+
+
+    def fetch_events_details(self):
+        pass
