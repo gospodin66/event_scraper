@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from sys import stdout
 from selenium.webdriver.common.by import By
+import os
+import io
 
 auth_dir = Path(__file__).resolve().parent.parent / '.auth'
 smtp = fread(Path(f'{auth_dir}/.smtp.txt')).split('\n')
@@ -26,10 +28,19 @@ if not hosts_path.exists():
 recipients_path = Path(auth_dir) / '.recipients.txt'
 if not recipients_path.exists():
     raise FileNotFoundError(f"Recipients file not found: {recipients_path}")
-    
+
 LOG_LEVEL = logging.INFO
-BINARY_NAME = 'google-chrome'
-BROWSER_BINARY_PATH = f'/usr/bin/{BINARY_NAME}'
+
+# Support both Windows and Linux paths
+if os.name == 'nt':
+    BINARY_NAME = 'firefox.exe'
+    BROWSER_BINARY_PATH = BINARY_NAME
+    os.chdir('C:\\Program Files\\Mozilla Firefox')
+else:
+    BINARY_NAME = 'firefox'
+    BROWSER_BINARY_PATH = f'/usr/bin/{BINARY_NAME}'
+    os.environ['PATH'] += os.pathsep + BROWSER_BINARY_PATH
+
 WAIT_TIMEOUT = 15
 
 COMMON = {
@@ -59,13 +70,18 @@ config = {
     'event_selector': (By.XPATH, "./ancestor::div/following-sibling::div"),
 }
 
-config['logger']['log_file'] = Path(f"{config['logger']['log_ts']}-events.log")
+# Change log file path to a writable directory
+log_dir = Path(__file__).resolve().parent.parent / 'logs'
+log_dir.mkdir(exist_ok=True)
+if not os.access(log_dir, os.W_OK):
+    raise PermissionError(f"Log directory is not writable: {log_dir}")
+config['logger']['log_file'] = log_dir / f"{config['logger']['log_ts']}-events.log"
 
 logging.basicConfig(
     level=config['logger']['level'],
     format=config['logger']['format'],
     handlers=[
-        logging.FileHandler(config['logger']['log_file']),
-        logging.StreamHandler(stdout)
+        logging.FileHandler(config['logger']['log_file'], encoding=config['encoding']),
+        logging.StreamHandler(io.TextIOWrapper(stdout.buffer, encoding=config['encoding']))
     ]
 )

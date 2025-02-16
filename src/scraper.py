@@ -6,6 +6,7 @@ from selenium.common.exceptions import (TimeoutException, StaleElementReferenceE
 import sys
 from time import sleep
 from smtp import SMTP
+import os  # Add this import
 
 class Scraper():
 
@@ -13,6 +14,11 @@ class Scraper():
         self.logger = getLogger(__name__)
         browser = BrowserType.FIREFOX if 'firefox' in BROWSER_BINARY_PATH else BrowserType.CHROME
         self.browser = BrowserFactory.create_browser(browser)
+        
+        # Check if the browser binary exists
+        if not os.path.exists(BROWSER_BINARY_PATH):
+            raise FileNotFoundError(f"Error: {BROWSER_BINARY_PATH} binary not found.")
+        
         self.hosts = self.get_event_hostlist()
         if not self.hosts:
             raise ValueError("No hosts found. Please check your configuration.")
@@ -51,7 +57,7 @@ class Scraper():
     def spawn_progbar(self):
         # '0.00%' has 5 characters
         percentage_offset = 5
-        sys.stdout.write("Processing...\n[0.00%{}]".format(" " * (self.progbar_width - percentage_offset)))
+        sys.stdout.write("\n0.00%{}".format(" " * (self.progbar_width - percentage_offset)))
         # return to start of line
         sys.stdout.write("\b" * (self.progbar_width +1)) 
         sys.stdout.flush()
@@ -61,7 +67,7 @@ class Scraper():
         percentage = (cycle / len(self.hosts)) * 100
         # '100.00%' has 7 characters
         percentage_offset = 6 if cycle < len(self.hosts) else 7
-        sys.stdout.write(f'\r[{str("=" * (self.progbar_step * cycle - percentage_offset))}{percentage:.2f}%')
+        sys.stdout.write(f'\r{str("=" * (self.progbar_step * cycle - percentage_offset))}{percentage:.2f}%')
         sys.stdout.flush()
         
 
@@ -69,7 +75,7 @@ class Scraper():
         """
         Wrapper for fetch_events() to ensure browser is closed after program execution.
         """
-        self.logger.info(f'Script is running on {str(self.browser.browser_type).split(".")[1].lower()} browser')
+        print(f'Script is running on {str(self.browser.browser_type).split(".")[1].lower()} browser')
         try:
             # Do something with the browser
             events = self.fetch_events()
@@ -95,9 +101,9 @@ class Scraper():
             except TimeoutException as e:
                 self.logger.error(f'{e.__class__.__name__} exception raised: {page_event_url}: {e.args[::-1]}')
                 continue
-            except Exception as e:
-                self.logger.error(f'Unknown exception raised: {page_event_url}: {e.args[::-1]}')
-                continue
+            #except Exception as e:
+            #    self.logger.error(f'Unknown exception raised: {page_event_url}: {e.args[::-1]}')
+            #    continue
 
             self.logger.debug(f"Searching for events on {host} event page {page_event_url}")
             sleep(WAIT_TIMEOUT)
@@ -134,9 +140,6 @@ class Scraper():
 
         return events
         
-
-
-
 
     def fetch_events_details(self):
         pass

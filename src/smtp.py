@@ -33,7 +33,7 @@ class SMTP:
             self.logger.error(f"Error: No event hosts found in list: {config['hostlist']}")
             return 1
 
-        payload = '\n{}\n'.format(fread(config['logger']['log_file']))
+        payload = '\n{}\n'.format(fread(config['logger']['log_file'], encoding=config['encoding']))
         subj_title = 'Latest events fetched: {}'.format(config['logger']['log_ts'])
         contents = 'Subject: {}\n\n{}'.format(subj_title, payload)
 

@@ -1,4 +1,3 @@
-from pathlib import Path
 import logging
 import random
 
@@ -14,10 +13,8 @@ def convert_time(seconds: float) -> str:
         return "{} seconds".format(seconds)
 
 
-def fread(file: Path) -> str:
-    if not file.exists():
-        return ""
-    with open(file, 'r') as f:
+def fread(filepath: str, encoding: str = 'utf-8') -> str:
+    with open(filepath, 'r', encoding=encoding) as f:
         return f.read()
 
 
