@@ -39,7 +39,6 @@ if os.name == 'nt':
 else:
     BINARY_NAME = 'firefox'
     BROWSER_BINARY_PATH = f'/usr/bin/{BINARY_NAME}'
-    os.environ['PATH'] += os.pathsep + BROWSER_BINARY_PATH
 
 WAIT_TIMEOUT = 15
 
@@ -49,6 +48,7 @@ COMMON = {
     'url_placeholder': '<event_host_name>',
     'user_agent': get_random_user_agent(),
 }
+
 config = {
     'encoding': 'utf-8',
     'logger': {
