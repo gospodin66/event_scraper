@@ -17,19 +17,8 @@ def is_behind_vpn() -> bool:
         if system() == "Windows":
             result = subprocess_run(['ipconfig'], capture_output=True, text=True)
             lines = result.stdout.splitlines()
-
-            for i, line in enumerate(lines):
-                if "NordLynx" in line:
-                    vpn_info = lines[i:i+7]
-                    break
-
-            if not vpn_info:
-                logger.error("VPN interface not found")
-                return False
-                
-            gateway = vpn_info[-1].strip().split(':')[-1].strip()
-            return True if gateway else False
-        
+            vpn_info = next((lines[i:i+7] for i, line in enumerate(lines) if "NordLynx" in line), None)
+            return True if vpn_info and vpn_info[-1].strip().split(':')[-1].strip() != "" else False
         else:
             logger.warning("Linux OS VPN check not supported - skipping")
             return True
@@ -39,14 +28,13 @@ def is_behind_vpn() -> bool:
         return False
 
 def main():
-    start = time()
-
     if not is_behind_vpn():
         logger.error("Error: Not behind a VPN. Please connect to a VPN and try again.")
         return 1
-
+    
+    start = time()
     s = Scraper()
-
+    
     try:
         if s.print_and_notify_on_events(s.run_program()) != 0:
             logger.error("Error fetching events or sending email notification.")

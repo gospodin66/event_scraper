@@ -77,7 +77,6 @@ class Scraper():
         """
         print(f'Script is running on {str(self.browser.browser_type).split(".")[1].lower()} browser')
         try:
-            # Do something with the browser
             events = self.fetch_events()
         finally:
             self.browser.close_browser()

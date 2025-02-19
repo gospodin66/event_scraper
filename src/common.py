@@ -1,7 +1,7 @@
-import logging
-import random
+from logging import getLogger
+from random import choice
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 def convert_time(seconds: float) -> str:
@@ -19,7 +19,7 @@ def fread(filepath: str, encoding: str = 'utf-8') -> str:
 
 
 def get_random_user_agent() -> str:
-    return random.choice([
+    return choice([
         # Chrome User Agents
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.5615.49 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.5563.64 Safari/537.36",

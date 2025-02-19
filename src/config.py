@@ -70,11 +70,11 @@ config = {
     'event_selector': (By.XPATH, "./ancestor::div/following-sibling::div"),
 }
 
-# Change log file path to a writable directory
 log_dir = Path(__file__).resolve().parent.parent / 'logs'
 log_dir.mkdir(exist_ok=True)
 if not os.access(log_dir, os.W_OK):
     raise PermissionError(f"Log directory is not writable: {log_dir}")
+
 config['logger']['log_file'] = log_dir / f"{config['logger']['log_ts']}-events.log"
 
 logging.basicConfig(

@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
-from config import BINARY_NAME, BROWSER_BINARY_PATH, COMMON, WAIT_TIMEOUT
-import logging
+from config import BINARY_NAME, COMMON, WAIT_TIMEOUT
+from logging import getLogger
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.firefox.service import Service as FirefoxService
-import shutil
+from shutil import which
 from enum import Enum
 
 class BrowserType(Enum):
@@ -13,7 +13,7 @@ class BrowserType(Enum):
 
 class Browser(ABC):
     def __init__(self, browser_type: BrowserType) -> None:
-        self.logger = logging.getLogger(__name__)
+        self.logger = getLogger(__name__)
         self.browser_type = browser_type
         self.driver = self.init_driver()
         if self.driver:
@@ -22,7 +22,7 @@ class Browser(ABC):
 
     def is_browser_installed(self) -> bool:
         try:
-            return bool(shutil.which(BINARY_NAME))
+            return bool(which(BINARY_NAME))
         except Exception as e:
             self.logger.error(f"Unknown exception raised: {e.args[::-1]}")
             return False
@@ -100,3 +100,4 @@ class BrowserFactory:
             return FirefoxBrowser()
         else:
             raise ValueError(f"Unsupported browser type: {browser_type}")
+        
