@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
-from config import BINARY_NAME, COMMON, WAIT_TIMEOUT
-from logging import getLogger
-from selenium import webdriver
+from config import BINARY_NAME, COMMON
+from logging import getLogger, DEBUG 
+from selenium.webdriver import FirefoxOptions, ChromeOptions, Firefox, Chrome
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from shutil import which
 from enum import Enum
+from selenium.common.exceptions import TimeoutException
+from subprocess import STDOUT
 
 class BrowserType(Enum):
     CHROME = "chrome"
@@ -14,18 +16,38 @@ class BrowserType(Enum):
 class Browser(ABC):
     def __init__(self, browser_type: BrowserType) -> None:
         self.logger = getLogger(__name__)
+        self.logger.level = DEBUG
+        self.browser_opts = [
+            "--incognito",
+            '--ignore-certificate-errors',
+            "--headless" if browser_type == BrowserType.FIREFOX else \
+            "--headless=new" if browser_type == BrowserType.CHROME else "",
+            '--no-sandbox',
+            "--no-gpu",
+            '--no-remote',
+            '--disable-gpu',
+            '--disable-software-rasterizer',
+            '--disable-extensions',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+            '--disable-accelerated-2d-canvas',
+            '--disable-accelerated-jpeg-decoding',
+            '--disable-accelerated-mjpeg-decode',
+            '--disable-accelerated-video-decode',
+            f"user-agent={COMMON.get('user_agent')}",
+        ]
+
         self.browser_type = browser_type
         self.driver = self.init_driver()
-        if self.driver:
-            self.driver.set_page_load_timeout(float(WAIT_TIMEOUT))
-            self.driver.implicitly_wait(float(WAIT_TIMEOUT))
 
-    def is_browser_installed(self) -> bool:
+
+    def detect_browser(self) -> str:
         try:
-            return bool(which(BINARY_NAME))
+            return which(BINARY_NAME)
         except Exception as e:
             self.logger.error(f"Unknown exception raised: {e.args[::-1]}")
-            return False
+            return ''
+
 
     @abstractmethod
     def init_driver(self):
@@ -38,59 +60,67 @@ class Browser(ABC):
     def close_browser(self):
         if self.driver:
             self.driver.quit()
-
+            
 
 class ChromeBrowser(Browser):
+    """
+    install chromedriver (used as a bridge between selenium and chrome)
+    # apt install google-chrome chromium-chromedriver
+    
+    $ pip3 install selenium
+    $ pip3 install webdriver-manager
+    """
     def __init__(self):
         super().__init__(BrowserType.CHROME)
 
-    def init_driver(self) -> webdriver.Chrome:
-        if not self.is_browser_installed():
+    def init_driver(self) -> Chrome:
+        if not self.detect_browser():
             self.logger.error(f'Error: {BINARY_NAME} binary not found.')
             return None
+        
+        try:
+            return Chrome(self.init_options(), ChromeService())
+        except TimeoutException as e:
+            self.logger.error(f'TimeoutException: {e}')
+            return None
 
-        return webdriver.Chrome(
-            options=self.init_options(),
-            service=ChromeService(),
-        )
-
-    def init_options(self) -> webdriver.ChromeOptions:
-        options = webdriver.ChromeOptions()
-        options.add_argument("--incognito")
-        options.add_argument("--disable-extensions")
-        options.add_argument('--ignore-certificate-errors')
-        options.add_argument(f"user-agent={COMMON.get('user_agent')}")
-        options.add_argument("--headless=new")
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
+    def init_options(self) -> ChromeOptions:
+        options = ChromeOptions()
+        for o in self.browser_opts:
+            options.add_argument(o)
         return options
 
 
 class FirefoxBrowser(Browser):
+    """
+    install geckodriver (used as a bridge between selenium and firefox)
+    $ wget https://github.com/mozilla/geckodriver/releases/download/v0.26.0/geckodriver-v0.26.0-linux64.tar.gz
+    $ tar -xvzf geckodriver-v0.26.0-linux64.tar.gz
+    # mv geckodriver /usr/local/bin/
+    # chmod +x /usr/local/bin/geckodriver
+    """
     def __init__(self):
         super().__init__(BrowserType.FIREFOX)
 
-    def init_driver(self) -> webdriver.Firefox:
-        if not self.is_browser_installed():
+    def init_driver(self) -> Firefox:
+        if not self.detect_browser():
             self.logger.error(f'Error: {BINARY_NAME} binary not found.')
             return None
+        
+        try:
+            return Firefox(self.init_options(), FirefoxService(executable_path='/usr/local/bin/geckodriver', log_output=STDOUT))
+        except TimeoutException as e:
+            self.logger.error(f'TimeoutException: {e}')
+            return None
 
-        return webdriver.Firefox(
-            options=self.init_options(),
-            service=FirefoxService(),
-        )
-
-    def init_options(self) -> webdriver.FirefoxOptions:
-        options = webdriver.FirefoxOptions()
-        options.add_argument("--incognito")
-        options.add_argument("--disable-extensions")
-        options.add_argument('--ignore-certificate-errors')
-        options.add_argument("--headless")
-        options.add_argument(f"user-agent={COMMON.get('user_agent')}")
+    def init_options(self) -> FirefoxOptions:
+        options = FirefoxOptions()
+        options.binary_location = which(BINARY_NAME)
+        for o in self.browser_opts:
+            options.add_argument(o)
         return options
 
 
-# Factory to create browser instances
 class BrowserFactory:
     @staticmethod
     def create_browser(browser_type: BrowserType) -> Browser:
@@ -100,4 +130,3 @@ class BrowserFactory:
             return FirefoxBrowser()
         else:
             raise ValueError(f"Unsupported browser type: {browser_type}")
-        

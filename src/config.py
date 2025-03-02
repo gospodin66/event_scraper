@@ -1,3 +1,4 @@
+from shutil import which
 from common import fread, get_random_user_agent
 from datetime import datetime
 import logging
@@ -33,14 +34,18 @@ LOG_LEVEL = logging.INFO
 
 # Support both Windows and Linux paths
 if os.name == 'nt':
-    BINARY_NAME = 'firefox.exe'
-    BROWSER_BINARY_PATH = BINARY_NAME
+    BINARY_NAME = 'chrome.exe' if which('chrome.exe') else \
+                  'firefox.exe'
+    BROWSER_BINARY_PATH = which(BINARY_NAME)
+    os.chdir('C:\\Program Files\\Google\\Chrome\\Application') if 'chrome.exe' in BINARY_NAME else \
     os.chdir('C:\\Program Files\\Mozilla Firefox')
 else:
-    BINARY_NAME = 'firefox'
-    BROWSER_BINARY_PATH = f'/usr/bin/{BINARY_NAME}'
+    BINARY_NAME = 'google-chrome' if which('google-chrome') else \
+                  'chromium-browser' if which('chromium-browser') else \
+                  'firefox'
+    BROWSER_BINARY_PATH = which(BINARY_NAME)
 
-WAIT_TIMEOUT = 15
+WAIT_TIMEOUT = 10
 
 COMMON = {
     'host': 'facebook.com',
