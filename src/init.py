@@ -20,7 +20,7 @@ def is_behind_vpn() -> bool:
             vpn_info = next((lines[i:i+7] for i, line in enumerate(lines) if "NordLynx" in line), None)
             return True if vpn_info and vpn_info[-1].strip().split(':')[-1].strip() != "" else False
         else:
-            logger.warning("Linux OS VPN check not supported - skipping")
+            logger.debug("Linux OS VPN check not supported - skipping")
             return True
 
     except SubprocessError as e:

@@ -1,4 +1,4 @@
-import smtplib
+from smtplib import SMTP as _SMTP, SMTPException
 from common import fread
 from config import config
 from email.mime.multipart import MIMEMultipart
@@ -36,7 +36,7 @@ class SMTP:
         contents = 'Subject: {}\n\n{}'.format(subj_title, payload)
 
         try:
-            with smtplib.SMTP(config['smtp']['server'], config['smtp']['port']) as server:
+            with _SMTP(config['smtp']['server'], config['smtp']['port']) as server:
                 server.starttls()
 
                 if config['smtp'].get('sender') and config['smtp'].get('app_passkey'):
@@ -52,7 +52,7 @@ class SMTP:
                 )
                 logger.info(f"Notification sent to {len(config['smtp']['recipients'])} recipients.")
 
-        except smtplib.SMTPException as e:
+        except SMTPException as e:
             logger.error(f"{e.__class__.__name__} exception raised: {e.args[::-1]}")
             return 1 
         except Exception as e:

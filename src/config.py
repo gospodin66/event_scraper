@@ -1,12 +1,14 @@
-from shutil import which
 from common import fread, get_random_user_agent
 from datetime import datetime
+from io import TextIOWrapper
 import logging
+from os import chdir, access, W_OK
 from pathlib import Path
-from sys import stdout
+from platform import system
 from selenium.webdriver.common.by import By
-import os
-import io
+from shutil import which
+from sys import stdout
+
 
 auth_dir = Path(__file__).resolve().parent.parent / '.auth'
 smtp = fread(Path(f'{auth_dir}/.smtp.txt')).split('\n')
@@ -30,23 +32,30 @@ recipients_path = Path(auth_dir) / '.recipients.txt'
 if not recipients_path.exists():
     raise FileNotFoundError(f"Recipients file not found: {recipients_path}")
 
+# Windows/Linux platform compatibility
+if system() == "Windows":
+    chrome_app_path = Path('C:\\Program Files\\Google\\Chrome\\Application')
+    firefox_app_path = Path('C:\\Program Files\\Mozilla Firefox')
+    BINARY_NAME = Path('chrome.exe') if which('chrome.exe') else \
+                  Path('firefox.exe')
+    BROWSER_BINARY_PATH = which(BINARY_NAME)
+    chdir(chrome_app_path) if 'chrome.exe' in BINARY_NAME else \
+    chdir(firefox_app_path)
+else:
+    BINARY_NAME = Path('google-chrome') if which('google-chrome') else \
+                  Path('chromium-browser') if which('chromium-browser') else \
+                  Path('firefox')
+    BROWSER_BINARY_PATH = which(BINARY_NAME)
+
+
 LOG_LEVEL = logging.INFO
 
-# Support both Windows and Linux paths
-if os.name == 'nt':
-    BINARY_NAME = 'chrome.exe' if which('chrome.exe') else \
-                  'firefox.exe'
-    BROWSER_BINARY_PATH = which(BINARY_NAME)
-    os.chdir('C:\\Program Files\\Google\\Chrome\\Application') if 'chrome.exe' in BINARY_NAME else \
-    os.chdir('C:\\Program Files\\Mozilla Firefox')
-else:
-    BINARY_NAME = 'google-chrome' if which('google-chrome') else \
-                  'chromium-browser' if which('chromium-browser') else \
-                  'firefox'
-    BROWSER_BINARY_PATH = which(BINARY_NAME)
-
+# Default timeout for waiting for elements and pages to load
 WAIT_TIMEOUT = 5
+# Maximum number of login attempts before returning exception
 LOGIN_ATTEMPTS = 3
+# CLASS_NUM_INDICATOR: exactly 14 classes in the class attribute list indicates an event container
+CLASS_NUM_INDICATOR = 14
 
 COMMON = {
     'host': 'facebook.com',
@@ -72,17 +81,15 @@ config = {
     },
     'hostlist': fread(hosts_path).split('\n'),
     'event_url': f'https://{COMMON["host"]}/{COMMON["url_placeholder"]}/upcoming_hosted_events',
-    'link_selector': (By.XPATH, "//a[@role='link']"),
-    'event_selector': (By.XPATH, "./ancestor::div/following-sibling::div"),
     'cookies_popup_selector': (By.XPATH, "//span[text()='Decline optional cookies']"),
     'login_popup_selector': (By.XPATH, "//div[contains(@aria-label, 'Close')]"),
     'event_container_selector': (By.XPATH, "//div[.//img and .//a and .//span]"),
-    'href': ".//a[@href]",
+    'href_selector': (By.XPATH, ".//a[@href]"),
 }
 
 log_dir = Path(__file__).resolve().parent.parent / 'logs'
 log_dir.mkdir(exist_ok=True)
-if not os.access(log_dir, os.W_OK):
+if not access(log_dir, W_OK):
     raise PermissionError(f"Log directory is not writable: {log_dir}")
 
 config['logger']['log_file'] = log_dir / f"{config['logger']['log_ts']}-events.log"
@@ -92,6 +99,6 @@ logging.basicConfig(
     format=config['logger']['format'],
     handlers=[
         logging.FileHandler(config['logger']['log_file'], encoding=config['encoding']),
-        logging.StreamHandler(io.TextIOWrapper(stdout.buffer, encoding=config['encoding']))
+        logging.StreamHandler(TextIOWrapper(stdout.buffer, encoding=config['encoding']))
     ]
 )

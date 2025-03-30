@@ -1,6 +1,6 @@
 from datetime import datetime
 from browser import BrowserFactory, BrowserType
-from config import BROWSER_BINARY_PATH, COMMON, WAIT_TIMEOUT, LOGIN_ATTEMPTS, config
+from config import BROWSER_BINARY_PATH, COMMON, WAIT_TIMEOUT, LOGIN_ATTEMPTS, CLASS_NUM_INDICATOR, config
 from common import dict_vals_exist
 from logging import getLogger
 from os import path
@@ -39,44 +39,54 @@ class Scraper():
         self.browser.driver.get(url)
         i = 0
         while i < LOGIN_ATTEMPTS and 'login' in self.browser.driver.current_url:
-            print(f"Login page detected ({i}). Retrying...")
+            self.logger.debug(f"Login page detected ({i}). Retrying...")
             self.browser.driver.get(url)
+            WebDriverWait(self.browser.driver, WAIT_TIMEOUT).until(
+                lambda driver: driver.execute_script("return document.readyState") == "complete"
+            )
             i += 1 
 
         if 'login' in self.browser.driver.current_url:
-            print("Login page detected after multiple attempts. Exiting...")
+            self.logger.error("Login page detected after multiple attempts. Exiting...")
             return []
         
         # in headless mode, the page may not load properly, so we need to reload it
         if idx == 0 and ('--headless' in self.browser.browser_opts or '--headless=new' in self.browser.browser_opts):
-            print("Headless mode detected. Reloading page.")
+            self.logger.debug("Headless mode detected. Reloading page.")
             self.browser.driver.get(url)
 
         try:
-            print("Closing cookies popup.")
+            self.logger.debug("Closing cookies popup.")
             WebDriverWait(self.browser.driver, WAIT_TIMEOUT).until(
-                EC.element_to_be_clickable((By.XPATH, "//span[text()='Decline optional cookies']"))
+                EC.element_to_be_clickable((
+                    config['cookies_popup_selector'][0], config['cookies_popup_selector'][1]
+                ))
             ).click()
         except Exception as e:
-            print(f"Popup doesn't exist.")
+            self.logger.debug(f"Popup doesn't exist.")
         
         try:
-            print("Closing login popup.")
+            self.logger.debug("Closing login popup.")
             WebDriverWait(self.browser.driver, WAIT_TIMEOUT).until(
-                EC.element_to_be_clickable((By.XPATH, "//div[contains(@aria-label, 'Close')]"))
+                EC.element_to_be_clickable((
+                    config['login_popup_selector'][0], config['login_popup_selector'][1]
+                ))
             ).click()
         except Exception as e:
-            print(f"Popup doesn't exist.")
+            self.logger.debug(f"Popup doesn't exist.")
 
 
-        print("Locating event containers...")
-        event_containers = self.browser.driver.find_elements(By.XPATH, "//div[.//img and .//a and .//span]")
-        # exactly 14 classes in the class attribute list indicates an event container
-        event_containers = [ event for event in event_containers if len(event.get_attribute('class').split()) == 14 ]
-        print(f"Found {len(event_containers)} events.")
+        self.logger.debug("Locating event containers...")
+        event_containers = self.browser.driver.find_elements(
+            config['event_container_selector'][0],
+            config['event_container_selector'][1]
+        )
+        # classes_indicator_num: exactly 14 classes in the class attribute list indicates an event container
+        event_containers = [ event for event in event_containers if len(event.get_attribute('class').split()) == CLASS_NUM_INDICATOR ]
+        self.logger.debug(f"Found {len(event_containers)} events.")
 
         for event in event_containers:
-            link = event.find_element(By.XPATH, config['href']).get_attribute('href')
+            link = event.find_element(config['href_selector'][0], config['href_selector'][1]).get_attribute('href')
             evt = self.parse_event(event.text, link)
             event_list.append(evt)
             
@@ -92,9 +102,13 @@ class Scraper():
         evts = ''
         for k, e in events.items():
             evts += f"\n{k}:\n"
+            if not e:
+                evts += "No events found.\n"
+                continue
             for event in e:
                 evts += f"{event['venue']} :: {event['where']} :: {event['when']} :: {event['link']}\n"
-            
+
+        # write results to terminal and log file
         self.logger.info(evts)
 
         if not dict_vals_exist(config['smtp']):
@@ -149,7 +163,7 @@ class Scraper():
         """
         Wrapper for scrape_events() to ensure browser is Closingd after program execution.
         """
-        print(f'Script is running on {str(self.browser.browser_type).split(".")[1].lower()} browser')
+        self.logger.debug(f'Script is running on {str(self.browser.browser_type).split(".")[1].lower()} browser')
 
         events = {}
 
@@ -157,10 +171,10 @@ class Scraper():
             for i, host in enumerate(self.hosts):
                 events[host] = []
                 page_event_url = str(config['event_url']).replace(COMMON['url_placeholder'], host)
-                self.logger.info(f"Searching for events on {host} event page {page_event_url}")
+                self.logger.debug(f"Searching for events on {host} event page {page_event_url}")
                 events[host] = self.get_events(page_event_url, i)
                 if not events[host]:
-                    self.logger.error(f"No events found for {host}.")
+                    self.logger.debug(f"No events found for {host}.")
                 
         finally:
             self.browser.close_browser()
