@@ -1,36 +1,87 @@
-from browser import (BrowserFactory, BrowserType)
-from config import BROWSER_BINARY_PATH, COMMON, config, WAIT_TIMEOUT
-from common import dict_vals_exist
 from datetime import datetime
+from browser import BrowserFactory, BrowserType
+from config import BROWSER_BINARY_PATH, COMMON, WAIT_TIMEOUT, LOGIN_ATTEMPTS, config
+from common import dict_vals_exist
 from logging import getLogger
-from selenium.common.exceptions import (TimeoutException, StaleElementReferenceException, WebDriverException)
-from sys import stdout
-from time import sleep
+from os import path
+from re import search, sub
 from smtp import SMTP
-import os
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+
+def get_event_hostlist() -> list:
+    return [eh for eh in config['hostlist'] if eh and not str(eh).startswith(('#', '\n'))]
+
 
 class Scraper():
 
     def __init__(self):
         self.logger = getLogger(__name__)
-        browser = BrowserType.FIREFOX if 'firefox' in BROWSER_BINARY_PATH else BrowserType.CHROME
-        self.browser = BrowserFactory.create_browser(browser)
+        self.browser = BrowserFactory.create_browser(
+            BrowserType.FIREFOX if 'firefox' in BROWSER_BINARY_PATH else BrowserType.CHROME
+        )
         
-        if not os.path.exists(BROWSER_BINARY_PATH):
+        if not path.exists(BROWSER_BINARY_PATH):
             raise FileNotFoundError(f"Error: {BROWSER_BINARY_PATH} binary not found.")
-        
-        self.hosts = self.get_event_hostlist()
+
+        self.hosts = get_event_hostlist()
         if not self.hosts:
             raise ValueError("No hosts found. Please check your configuration.")
+
+
+    def get_events(self, url: str, idx: int) -> list:
+        """
+        Scrape events from the given URL.
+        """
+        event_list = []
+        self.browser.driver.get(url)
+        i = 0
+        while i < LOGIN_ATTEMPTS and 'login' in self.browser.driver.current_url:
+            print(f"Login page detected ({i}). Retrying...")
+            self.browser.driver.get(url)
+            i += 1 
+
+        if 'login' in self.browser.driver.current_url:
+            print("Login page detected after multiple attempts. Exiting...")
+            return []
         
-        self.progbar_width = 50
-        self.progbar_step = round(self.progbar_width / len(self.hosts))
+        # in headless mode, the page may not load properly, so we need to reload it
+        if idx == 0 and ('--headless' in self.browser.browser_opts or '--headless=new' in self.browser.browser_opts):
+            print("Headless mode detected. Reloading page.")
+            self.browser.driver.get(url)
+
+        try:
+            print("Closing cookies popup.")
+            WebDriverWait(self.browser.driver, WAIT_TIMEOUT).until(
+                EC.element_to_be_clickable((By.XPATH, "//span[text()='Decline optional cookies']"))
+            ).click()
+        except Exception as e:
+            print(f"Popup doesn't exist.")
+        
+        try:
+            print("Closing login popup.")
+            WebDriverWait(self.browser.driver, WAIT_TIMEOUT).until(
+                EC.element_to_be_clickable((By.XPATH, "//div[contains(@aria-label, 'Close')]"))
+            ).click()
+        except Exception as e:
+            print(f"Popup doesn't exist.")
 
 
+        print("Locating event containers...")
+        event_containers = self.browser.driver.find_elements(By.XPATH, "//div[.//img and .//a and .//span]")
+        # exactly 14 classes in the class attribute list indicates an event container
+        event_containers = [ event for event in event_containers if len(event.get_attribute('class').split()) == 14 ]
+        print(f"Found {len(event_containers)} events.")
 
-    def get_event_hostlist(self) -> list:
-        return [eh for eh in config['hostlist'] if eh and not str(eh).startswith(('#', '\n'))]
-    
+        for event in event_containers:
+            link = event.find_element(By.XPATH, config['href']).get_attribute('href')
+            evt = self.parse_event(event.text, link)
+            event_list.append(evt)
+            
+        return event_list
+
 
     def print_and_notify_on_events(self, events: dict) -> int:
         
@@ -57,116 +108,60 @@ class Scraper():
         return 0
 
 
-    def spawn_progbar(self):
-        # '0.00%' has 5 characters
-        percentage_offset = 5
-        stdout.write("\n0.00%{}".format(" " * (self.progbar_width - percentage_offset)))
-        # return to start of line
-        stdout.write("\b" * (self.progbar_width +1)) 
-        stdout.flush()
+    def parse_event(self, event_text: str, link: str) -> dict:
+        event_data = {}
+        formatted_date = None
 
+        lines = event_text.strip().split("\n")
 
-    def update_progbar(self, cycle: int):
-        percentage = (cycle / len(self.hosts)) * 100
-        # '100.00%' has 7 characters
-        percentage_offset = 6 if cycle < len(self.hosts) else 7
-        stdout.write(f'\r{str("=" * (self.progbar_step * cycle - percentage_offset))}{percentage:.2f}%')
-        stdout.flush()
+        if "Happening now" in lines[0]:
+            event_data["when"] = lines[0]
+        else: 
+            date_match = search(r"EVENT:\s+(.*)", lines[0])
+            date_str = date_match.group(1) if date_match else lines[0]
+            date_str = date_str.replace("\u202f", " ").replace(' at', '').strip()
+            date_str_clean = sub(r"\s[A-Z]+$", "", date_str)
+            try:
+                formatted_date = datetime.strptime(date_str_clean, '%a, %b %d %Y %I:%M %p')\
+                                         .strftime('%a, %b %d %Y, %I:%M %p')
+            except ValueError:
+                try:
+                    # If parsing with the year fails, try without the year and assume the current year
+                    formatted_date = datetime.strptime(date_str_clean, '%a, %b %d %I:%M %p')\
+                                             .replace(year=datetime.now().year)\
+                                             .strftime('%a, %b %d %Y, %I:%M %p')
+                except ValueError as e:
+                    self.logger.error(f"Date parsing error: {e}")
+
+            event_data["when"] = formatted_date
         
+        event_data["venue"] = lines[1] if len(lines) > 1 else "Unknown"
+        venue_lines = [line.replace('  · ', '').strip() for line in lines if " · " in line]
+        event_data["where"] = venue_lines[0] if venue_lines else "Unknown"
+        organizer_match = search(r"Event by (.*)", event_text)
+        event_data["event_by"] = organizer_match.group(1) if organizer_match else "Unknown"
+        event_data["link"] = link
+        
+        return event_data
+
 
     def run_program(self) -> dict:
         """
-        Wrapper for fetch_events() to ensure browser is closed after program execution.
+        Wrapper for scrape_events() to ensure browser is Closingd after program execution.
         """
         print(f'Script is running on {str(self.browser.browser_type).split(".")[1].lower()} browser')
+
+        events = {}
+
         try:
-            events = self.fetch_events()
+            for i, host in enumerate(self.hosts):
+                events[host] = []
+                page_event_url = str(config['event_url']).replace(COMMON['url_placeholder'], host)
+                self.logger.info(f"Searching for events on {host} event page {page_event_url}")
+                events[host] = self.get_events(page_event_url, i)
+                if not events[host]:
+                    self.logger.error(f"No events found for {host}.")
+                
         finally:
             self.browser.close_browser()
         return events
-
-
-    def fetch_events(self) -> dict:
-        """
-        Follows links crafted by event host name and fb events URL.
-        Extracts latest events from the events page.
-        """
-        events = {}
-        self.spawn_progbar()
-
-        for i, host in enumerate(self.hosts):
-            events[host] = []
-            page_event_url = str(config['event_url']).replace(COMMON['url_placeholder'], host)
-
-            try:
-                self.browser.driver.get(page_event_url)
-                self.logger.debug(f"Searching for events on {host} event page {page_event_url}")
-                sleep(WAIT_TIMEOUT)
-            except (TimeoutException, WebDriverException) as e:
-                self.logger.error(f'{e.__class__.__name__} raised: {page_event_url}: {e.args[::-1]}')
-                continue
-
-            try:
-                for link in self.browser.driver.find_elements(
-                    by=config['link_selector'][0],
-                    value=config['link_selector'][1]
-                ):
-                    href = link.get_attribute('href')
-
-                    if 'event' in href and not href in events[host]:
-
-                        event = link.find_element(
-                            by=config['event_selector'][0],
-                            value=config['event_selector'][1]
-                        )
-                        if hasattr(event, 'text') and event.text != '':
-
-                            event_lines = event.text.split('\n\n\n')
-      
-                            for line in event_lines:
-                                if line.startswith(('Mon','Tue','Wed','Thu','Fri','Sat','Sun')):
-
-                                    lns = line.split('\n')
-                                    date_str = lns[0]
-
-                                    if ' at ' in date_str:
-                                        date_str = date_str.split(' at ')[0]
-                                        
-                                    try:
-                                        formatted_date = datetime.strptime(date_str, '%a, %b %d, %Y').strftime('%a, %b %d %Y')
-                                    except ValueError:
-                                        try:
-                                            # If parsing with the year fails, try without the year and assume the current year
-                                            formatted_date = datetime.strptime(date_str, '%a, %b %d').replace(year=datetime.now().year).strftime('%a, %b %d %Y')
-                                        except ValueError as e:
-                                            self.logger.error(f"Date parsing error: {e}")
-                                            continue
-
-                                    lns[0] = lns[0].encode('ascii', 'ignore').decode('ascii')
-                                    lns[0] = lns[0].replace(date_str, formatted_date)
-                                    events[host].append({
-                                        'when': lns[0],
-                                        'venue': lns[1],
-                                        'where': lns[2] + lns[3].replace('  · ', ' '),
-                                        'event_by': lns[4] if len(lns) > 4 and len(lns[4]) > 10 else '',
-                                        'link': href
-                                    })
-
-                self.update_progbar(i+1)
-
-            except (TimeoutException, StaleElementReferenceException, WebDriverException) as e:
-                self.logger.error(
-                    f'{e.__class__.__name__} exception raised: '\
-                    f'Failed to fetch events for {page_event_url}: {e.args[::-1]}'
-                )
-            except Exception as e:
-                self.logger.error(f"Unknown exception raised: Unable to find html element: {e.args[::-1]}") 
-        
-        stdout.write('\n')
-        stdout.flush()
-
-        return events
-        
-
-    def fetch_events_details(self):
-        pass

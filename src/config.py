@@ -45,7 +45,8 @@ else:
                   'firefox'
     BROWSER_BINARY_PATH = which(BINARY_NAME)
 
-WAIT_TIMEOUT = 10
+WAIT_TIMEOUT = 5
+LOGIN_ATTEMPTS = 3
 
 COMMON = {
     'host': 'facebook.com',
@@ -70,9 +71,13 @@ config = {
         'mime_type': 'plain',
     },
     'hostlist': fread(hosts_path).split('\n'),
-    'event_url': f'https://{COMMON["host"]}/{COMMON["url_placeholder"]}/events',
+    'event_url': f'https://{COMMON["host"]}/{COMMON["url_placeholder"]}/upcoming_hosted_events',
     'link_selector': (By.XPATH, "//a[@role='link']"),
     'event_selector': (By.XPATH, "./ancestor::div/following-sibling::div"),
+    'cookies_popup_selector': (By.XPATH, "//span[text()='Decline optional cookies']"),
+    'login_popup_selector': (By.XPATH, "//div[contains(@aria-label, 'Close')]"),
+    'event_container_selector': (By.XPATH, "//div[.//img and .//a and .//span]"),
+    'href': ".//a[@href]",
 }
 
 log_dir = Path(__file__).resolve().parent.parent / 'logs'

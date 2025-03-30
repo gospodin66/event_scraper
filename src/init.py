@@ -36,9 +36,7 @@ def main():
     s = Scraper()
     
     try:
-        if s.print_and_notify_on_events(s.run_program()) != 0:
-            logger.error("Error fetching events or sending email notification.")
-            return 1
+        s.print_and_notify_on_events(s.run_program())
     except KeyboardInterrupt:
         logger.warning("Keyboard interrupt.")
         return 1
