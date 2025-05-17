@@ -111,6 +111,10 @@ class Scraper():
         # write results to terminal and log file
         self.logger.info(evts)
 
+        if not config['smtp']:
+            print("SMTP not configured - skipping...")
+            return 0
+        
         if not dict_vals_exist(config['smtp']):
             self.logger.error("Error: SMTP is not configured.")
             return 1
@@ -118,14 +122,127 @@ class Scraper():
         if SMTP().notify_email() != 0:
             self.logger.error("Error: Failed to send email notification.")
             return 1
-        
+
         return 0
+
+
+    def detect_date_format(self, date_string: str):
+        formats = [
+            # Basic numeric formats
+            "%Y-%m-%d",
+            "%d-%m-%Y",
+            "%m-%d-%Y",
+            "%Y/%m/%d",
+            "%d/%m/%Y",
+            "%m/%d/%Y",
+            "%Y.%m.%d",
+            "%d.%m.%Y",
+            "%m.%d.%Y",
+            # Extended formats with time
+            "%Y-%m-%d %H:%M:%S",
+            "%d-%m-%Y %H:%M:%S",
+            "%m-%d-%Y %H:%M:%S",
+            "%Y/%m/%d %H:%M:%S",
+            "%d/%m/%Y %H:%M:%S",
+            "%m/%d/%Y %H:%M:%S",
+            "%Y.%m.%d %H:%M:%S",
+            "%d.%m.%Y %H:%M:%S",
+            "%m.%d.%Y %H:%M:%S",
+            # Shortened year formats
+            "%y-%m-%d",
+            "%d-%m-%y",
+            "%m-%d-%y",
+            "%y/%m/%d",
+            "%d/%m/%y",
+            "%m/%d/%y",
+            "%y.%m.%d",
+            "%d.%m.%y",
+            "%m.%d.%y",
+            # Month names
+            "%B %d, %Y",
+            "%b %d, %Y",
+            "%d %B %Y",
+            "%d %b %Y",
+            "%B %d, %y",
+            "%b %d, %y",
+            "%d %B %y",
+            "%d %b %y",
+            # Mixed separators
+            "%Y %b %d",
+            "%Y %B %d",
+            "%d %b %Y",
+            "%d %B %Y",
+            # Special formats
+            "%d %B, %Y",
+            "%d %b, %Y",
+            "%B %dth, %Y",
+            "%d-%b-%Y",
+            "%d-%B-%Y",
+            "%b-%d-%Y",
+            "%B-%d-%Y",
+            # ISO formats
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%dT%H:%M:%S.%fZ",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            # Day/Month names
+            "%A, %d %B %Y",
+            "%a, %d %b %Y",
+            "%A, %B %d, %Y",
+            "%a, %b %d, %Y",
+            # New formats for missing cases
+            "%a, %d %b %H:%M",
+            "%A, %d %B %H:%M",
+            "%a, %b %d %H:%M",
+            "%A, %B %d %H:%M",
+            "%d %B %H:%M",
+            "%d %b %H:%M",
+            "%B %d %H:%M",
+            "%b %d %H:%M",
+            "%d-%b %H:%M",
+            "%d-%B %H:%M",
+            "%b-%d %H:%M",
+            "%B-%d %H:%M",
+            "%d/%b %H:%M",
+            "%d/%B %H:%M",
+            "%b/%d %H:%M",
+            "%B/%d %H:%M",
+            "%d.%b %H:%M",
+            "%d.%B %H:%M",
+            "%b.%d %H:%M",
+            "%B.%d %H:%M",
+            # Full date with time and weekday
+            "%a, %b %d %I:%M %p",
+            "%A, %B %d %I:%M %p",
+            # Custom
+            '%a, %b %d %Y',
+            '%a, %b %d %Y, %I:%M %p',
+        ]
+
+        # Handle date ranges like 'Fri, 23 May-24 May' or 'Mon, May 26 - Jun 1'
+        if '-' in date_string:
+            # Take only the first part of the range for parsing
+            start = date_string.split('-')[0].strip()
+            try:
+                # Detect format for the start date only
+                print(start)
+                return self.detect_date_format(start)
+            except ValueError:
+                pass
+        
+        # Fallback to regular formats
+        for fmt in formats:
+            try:
+                parsed_date = datetime.strptime(date_string, fmt)
+                return fmt
+            except ValueError:
+                continue
+        
+        return None
 
 
     def parse_event(self, event_text: str, link: str) -> dict:
         event_data = {}
-        formatted_date = None
-
         lines = event_text.strip().split("\n")
 
         if "Happening now" in lines[0]:
@@ -136,19 +253,23 @@ class Scraper():
             date_str = date_str.replace("\u202f", " ").replace(' at', '').strip()
             date_str_clean = sub(r"\s[A-Z]+$", "", date_str)
             try:
-                formatted_date = datetime.strptime(date_str_clean, '%a, %b %d %Y %I:%M %p')\
-                                         .strftime('%a, %b %d %Y, %I:%M %p')
-            except ValueError:
-                try:
-                    # If parsing with the year fails, try without the year and assume the current year
-                    formatted_date = datetime.strptime(date_str_clean, '%a, %b %d %I:%M %p')\
-                                             .replace(year=datetime.now().year)\
-                                             .strftime('%a, %b %d %Y, %I:%M %p')
-                except ValueError as e:
-                    self.logger.error(f"Date parsing error: {e}")
+                if '-' in date_str_clean:
+                    date_str_clean = f'{date_str_clean.split('-')[0].strip()} {datetime.now().year}'
+                    fmt = self.detect_date_format(date_str_clean)
+                    parsed_date = datetime.strptime(f'{date_str_clean}', self.detect_date_format(date_str_clean))
+                else:
+                    parsed_date = datetime.strptime(date_str_clean, self.detect_date_format(date_str_clean))
+                    fmt = self.detect_date_format(date_str_clean)
 
-            event_data["when"] = formatted_date
-        
+                if parsed_date.year != datetime.now().year:
+                    parsed_date = parsed_date.replace(year=datetime.now().year)
+
+                event_data["when"] = parsed_date.strftime(fmt)
+
+            except Exception as e:
+                print(f"Error: Failed to parse date: {date_str_clean}: {e}")
+                event_data["when"] = ""
+
         event_data["venue"] = lines[1] if len(lines) > 1 else "Unknown"
         venue_lines = [line.replace('  · ', '').strip() for line in lines if " · " in line]
         event_data["where"] = venue_lines[0] if venue_lines else "Unknown"

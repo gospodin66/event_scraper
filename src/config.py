@@ -9,44 +9,8 @@ from selenium.webdriver.common.by import By
 from shutil import which
 from sys import stdout
 
-
-auth_dir = Path(__file__).resolve().parent.parent / '.auth'
-smtp = fread(Path(f'{auth_dir}/.smtp.txt')).split('\n')
-
-if len(smtp) < 2:
-    raise ValueError("SMTP configuration is incomplete. Need both host and user details.")
-
-smtp_host = smtp[0].split(':') if smtp[0] else []
-smtp_user = smtp[1].split(':') if smtp[1] else []
-
-if not smtp_host or len(smtp_host) != 2:
-    raise ValueError("SMTP host must be in format 'host:port'")
-if not smtp_user or len(smtp_user) != 2:
-    raise ValueError("SMTP user must be in format 'username:password'")
-
-hosts_path = Path(auth_dir) / '.hosts.txt'
-if not hosts_path.exists():
-    raise FileNotFoundError(f"Hosts file not found: {hosts_path}")
-
-recipients_path = Path(auth_dir) / '.recipients.txt'
-if not recipients_path.exists():
-    raise FileNotFoundError(f"Recipients file not found: {recipients_path}")
-
-# Windows/Linux platform compatibility
-if system() == "Windows":
-    chrome_app_path = Path('C:\\Program Files\\Google\\Chrome\\Application')
-    firefox_app_path = Path('C:\\Program Files\\Mozilla Firefox')
-    BINARY_NAME = Path('chrome.exe') if which('chrome.exe') else \
-                  Path('firefox.exe')
-    BROWSER_BINARY_PATH = which(BINARY_NAME)
-    chdir(chrome_app_path) if 'chrome.exe' in BINARY_NAME else \
-    chdir(firefox_app_path)
-else:
-    BINARY_NAME = Path('google-chrome') if which('google-chrome') else \
-                  Path('chromium-browser') if which('chromium-browser') else \
-                  Path('firefox')
-    BROWSER_BINARY_PATH = which(BINARY_NAME)
-
+# set borwser for scraping (chrome|firefox)
+BROWSER = 'chrome'
 
 LOG_LEVEL = logging.INFO
 
@@ -64,20 +28,49 @@ COMMON = {
     'user_agent': get_random_user_agent(),
 }
 
+# Windows/Linux platform compatibility for chrome/firefox
+if system() == "Windows":
+    if BROWSER == 'chrome':
+        app_path = Path('C:\\Program Files\\Google\\Chrome\\Application')
+        binary_name = Path('chrome.exe')
+    elif BROWSER == 'firefox':
+        app_path = Path('C:\\Program Files\\Mozilla Firefox')
+        binary_name = Path('firefox.exe')
+        # init geckodriver path
+        geckodriver = 'X:\\Geckodriver\\geckodriver.exe'
+    else:
+        print("Error: Unrecognized browser.")
+        exit(1)
+
+    chdir(app_path)
+    BROWSER_BINARY_PATH = f'{app_path}\\{binary_name}'
+
+else:
+    if BROWSER == 'chrome':
+        binary_name = Path('google-chrome')
+    elif BROWSER == 'firefox':
+        binary_name = Path('firefox')
+        # init geckodriver path
+        geckodriver = '/usr/local/bin/geckodriver'
+    else:
+        print("Error: Unrecognized browser.")
+        exit(1)
+    
+    BROWSER_BINARY_PATH = which(binary_name)
+
+auth_dir = Path(__file__).resolve().parent.parent / '.auth'
+smtp_config_path = Path(f'{auth_dir}/.smtp.txt')
+
+hosts_path = Path(auth_dir) / '.hosts.txt'
+if not hosts_path.exists():
+    raise FileNotFoundError(f"Hosts file not found: {hosts_path}")
+
 config = {
     'encoding': 'utf-8',
     'logger': {
         'format': '%(message)s',
         'level': LOG_LEVEL,
         'log_ts': datetime.now().strftime('%Y-%m-%d-%H-%M')
-    },
-    'smtp': {
-        'server': smtp_host[0],
-        'port': smtp_host[1],
-        'sender': smtp_user[0],
-        'app_passkey': smtp_user[1],
-        'recipients': fread(recipients_path).split('\n'),
-        'mime_type': 'plain',
     },
     'hostlist': fread(hosts_path).split('\n'),
     'event_url': f'https://{COMMON["host"]}/{COMMON["url_placeholder"]}/upcoming_hosted_events',
@@ -86,6 +79,36 @@ config = {
     'event_container_selector': (By.XPATH, "//div[.//img and .//a and .//span]"),
     'href_selector': (By.XPATH, ".//a[@href]"),
 }
+
+if smtp_config_path.exists():
+
+    recipients_path = Path(auth_dir) / '.recipients.txt'
+    if not recipients_path.exists():
+        raise FileNotFoundError(f"Recipients file not found: {recipients_path}")
+
+    smtp = fread(smtp_config_path).split('\n')
+
+    if len(smtp) < 2:
+        raise ValueError("SMTP configuration is incomplete. Need both host and user details.")
+
+    smtp_host = smtp[0].split(':') if smtp[0] else []
+    smtp_user = smtp[1].split(':') if smtp[1] else []
+
+    if not smtp_host or len(smtp_host) != 2:
+        raise ValueError("SMTP host must be in format 'host:port'")
+    if not smtp_user or len(smtp_user) != 2:
+        raise ValueError("SMTP user must be in format 'username:password'")
+
+    config['smtp'] = {
+        'server': smtp_host[0],
+        'port': smtp_host[1],
+        'sender': smtp_user[0],
+        'app_passkey': smtp_user[1],
+        'recipients': fread(recipients_path).split('\n'),
+        'mime_type': 'plain',
+    }
+else: 
+    config['smtp'] = {}
 
 log_dir = Path(__file__).resolve().parent.parent / 'logs'
 log_dir.mkdir(exist_ok=True)
